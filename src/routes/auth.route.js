@@ -1,23 +1,48 @@
-const express = require('express')
-const route = express.Router();
-const authController = require('../controllers/auth.controller')
+const express = require('express');
+const router = express.Router();
+const {
+    adminRegister,
+    adminLogin,
+    adminLogout,
+    studentLogin,
+    studentLogout,
+    facultyRegister,
+    facultyLogin,
+    facultyLogout,
+    tgRegister,
+    tgLogin,
+    tgLogout,
+    studentRegister,
+    changePassword,
+    forgotPassword,
+    resetPassword
+} = require('../controllers/auth.controller');
+const authController = require('../controllers/auth.controller');
 
-// Admin authentication part 
-route.post('/admin-register',authController.adminRegister)
-route.post('/admin-login',authController.adminLogin)
-route.get('/admin-logout',authController.adminlogout)
+// Admin routes
+router.post('/admin/register', adminRegister);
+router.post('/admin/login', adminLogin);
+router.post('/admin/logout', adminLogout);
 
+// Faculty routes
+router.post('/faculty/register', facultyRegister);
+router.post('/faculty/login', facultyLogin);
+router.post('/faculty/logout', facultyLogout);
 
+// TG routes
+router.post('/tg/register', tgRegister);
+router.post('/tg/login', tgLogin);
+router.post('/tg/logout', tgLogout);
 
-// Student authentication part
-route.post('/student-login',authController.studentLogin)
-route.get('/student-logout',authController.studentlogout)
+// Student routes
+router.post('/student/register', studentRegister);
+router.post('/student/login', studentLogin);
+router.post('/student/logout', studentLogout);
 
+// Password change
+router.post('/change-password', changePassword);
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/verify-otp', authController.verifyOTP);
+router.post('/reset-password', authController.resetPassword);
 
-
-
-
-
-
-
-module.exports = route;
+module.exports = router;
