@@ -4,8 +4,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const HODmodel = require('../models/hod.moddel');
 const tgmodel = require('../models/tg.model');
-const nodemailer = require('nodemailer');
 const tgModel = require('../models/tg.model');
+const { sendCredentialsEmail, sendPasswordResetEmail } = require('../services/email.service');
 
 // Utility function to generate JWT token
 const generateToken = (id) => {
@@ -31,114 +31,14 @@ const generateRandomPassword = () => {
     return Math.floor(Math.random() * 90000000) + 100000 + ''; // 6 digit random number as string
 };
 
-// Email configuration (optional - only create if credentials exist)
-let transporter = null;
-if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
-    try {
-        const emailHost = process.env.EMAIL_SERVICE === 'gmail' ? 'smtp.gmail.com' : 'smtp.ethereal.email';
-        console.log('🔧 Configuring email transporter...');
-        console.log('   Host:', emailHost);
-        console.log('   User:', process.env.EMAIL_USER);
 
-        transporter = nodemailer.createTransport({
-            host: emailHost,
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD
-            }
-        });
-
-        // Verify connection
-        transporter.verify(function (error, success) {
-            if (error) {
-                console.error('❌ Email verification failed:', error.message);
-                transporter = null;
-            } else {
-                console.log('✅ Email transporter configured and verified successfully');
-            }
-        });
-    } catch (error) {
-        console.error('❌ Email transporter configuration failed:', error.message);
-        transporter = null;
-    }
-} else {
-    console.log('⚠️  Email not configured (missing EMAIL_USER or EMAIL_PASSWORD)');
-}
-
-// Send email with credentials
-const sendCredentialsEmail = async (email, password, name, userType) => {
-    // If email is not configured, just log credentials to console
-    if (!transporter) {
-        console.log('\n=================================');
-        console.log(`📧 ${userType} Credentials (Email not configured)`);
-        console.log('=================================');
-        console.log(`Name: ${name}`);
-        console.log(`Email: ${email}`);
-        console.log(`Temporary Password: ${password}`);
-        console.log('=================================\n');
-        return;
-    }
-
-    try {
-        console.log(`\n📤 Attempting to send email...`);
-        console.log(`   To: ${email}`);
-        console.log(`   From: ${process.env.EMAIL_USER}`);
-        console.log(`   Type: ${userType}`);
-
-        const mailOptions = {
-            from: `"No Reply" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: `Your ${userType} Account Credentials`,
-            text: `Welcome ${name}! Your account has been created.\n\nEmail: ${email}\nTemporary Password: ${password}\n\nImportant: Please change your password after first login.`,
-            html: `
-                <h2>Welcome ${name}!</h2>
-                <p>Your ${userType} account has been created.</p>
-                <p><strong>Email:</strong> ${email}</p>
-                <p><strong>Temporary Password:</strong> ${password}</p>
-                <p><strong>Important:</strong> Please change your password after first login.</p>
-            `
-        };
-
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✅ Email sent successfully!`);
-        console.log(`   Message ID: ${info.messageId}`);
-
-        // For Ethereal, show preview URL
-        if (process.env.EMAIL_SERVICE === 'ethereal') {
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`   🔗 Preview: ${previewUrl}`);
-            }
-        }
-        console.log('');
-    } catch (error) {
-        console.error('\n❌ Email sending failed!');
-        console.error('   Error Type:', error.name);
-        console.error('   Error Code:', error.code || 'N/A');
-        console.error('   Error Message:', error.message);
-        if (error.command) console.error('   Command:', error.command);
-        if (error.response) console.error('   Response:', error.response);
-        console.error('   Full Error:', error);
-
-        // If email fails, log credentials to console as backup
-        console.log('\n=================================');
-        console.log(`📧 ${userType} Credentials (Email failed to send)`);
-        console.log('=================================');
-        console.log(`Name: ${name}`);
-        console.log(`Email: ${email}`);
-        console.log(`Temporary Password: ${password}`);
-        console.log('=================================\n');
-    }
-};
 
 // ==================== ADMIN ROUTES ====================
 
 // Admin Register
 async function adminRegister(req, res) {
     try {
-        const { username, email, password } = req.body;
+        const { username, email, password } = req.body || {};
 
         // Validate input
         if (!username || !email || !password) {
@@ -298,7 +198,7 @@ async function facultyRegister(req, res) {
         // Create new faculty
         const newFaculty = await HODmodel.create({
             name,
-            department,
+            department: department.trim(),
             email,
             password: hashPassword
         });
@@ -431,7 +331,7 @@ async function tgRegister(req, res) {
         // Create new TG
         const newTG = await tgmodel.create({
             name,
-            department,
+            department: department.trim(),
             email,
             password: hashPassword,
             hodid: hod._id
@@ -545,16 +445,21 @@ async function studentRegister(req, res) {
 
         // ✅ Step 3: Find HOD for this branch
         const capitalBranch = branch.toUpperCase()
-        const hod = await HODmodel.findOne({ department: capitalBranch });
+        const regex = new RegExp(`^${capitalBranch.trim()}\\s*$`, 'i');
+
+        const hod = await HODmodel.findOne({ department: { $regex: regex } });
         if (!hod) {
             return res.status(404).json({ message: "No HOD found for this branch" });
         }
 
         // ✅ Step 4: Find TGs in that branch
-        const tgs = await tgModel.find({ department: capitalBranch });
+        const tgs = await tgModel.find({ department: { $regex: regex } });
+
         if (tgs.length === 0) {
             return res.status(404).json({ message: "No TGs found for this branch" });
         }
+        // console.log("✅ Found TGs:", tgs.length);
+
 
         // ✅ Step 5: Assign TG (30 students per TG)
         let assignedTG = null;
@@ -793,7 +698,6 @@ async function forgotPassword(req, res) {
     try {
         const { email } = req.body;
         let { userType } = req.body;
-        const { sendPasswordResetEmail } = require('../services/email.service');
 
         if (!email) {
             return res.status(400).json({ message: "Email or ID is required" });

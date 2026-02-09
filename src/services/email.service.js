@@ -1,34 +1,39 @@
 // services/emailService.js
-const nodemailer = require('nodemailer');
+const brevo = require('@getbrevo/brevo');
 
-// Create transporter
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com', // e.g., smtp.gmail.com
-    port: process.env.EMAIL_PORT || 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-    }
-});
+// Configure Brevo
+const apiInstance = new brevo.TransactionalEmailsApi();
+// Initialize the authorization
+let apiKey = apiInstance.authentications['apiKey'];
 
-// Send email function
-async function sendEmail({ to, subject, text, html }) {
+if (!process.env.BREVO_API_KEY) {
+    console.error("❌ FATAL: BREVO_API_KEY is missing in .env file");
+} else {
+    console.log("✅ Brevo API Key loaded (starts with: " + process.env.BREVO_API_KEY.substring(0, 10) + "...)");
+}
+
+apiKey.apiKey = process.env.BREVO_API_KEY;
+
+const SENDER_EMAIL = process.env.EMAIL_USER || 'no-reply@egatepass.com';
+const SENDER_NAME = "E-GatePass System";
+
+// Send email function using Brevo
+async function sendEmail({ to, subject, html, text }) {
     try {
-        const mailOptions = {
-            from: `"E-GatePass System" <${process.env.EMAIL_USER}>`,
-            to,
-            subject,
-            text,
-            html
-        };
+        const sendSmtpEmail = new brevo.SendSmtpEmail();
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent:', info.messageId);
-        return { success: true, messageId: info.messageId };
+        sendSmtpEmail.subject = subject;
+        sendSmtpEmail.htmlContent = html;
+        sendSmtpEmail.textContent = text;
+        sendSmtpEmail.sender = { "name": SENDER_NAME, "email": SENDER_EMAIL };
+        sendSmtpEmail.to = [{ "email": to }];
+
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        console.log('✅ Email sent via Brevo. MessageId:', data.messageId);
+        return { success: true, messageId: data.messageId };
     } catch (error) {
-        console.error('Email sending failed:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Brevo Email sending failed:', error);
+        throw error; // Rethrow to allow callers to handle failure
     }
 }
 
@@ -79,8 +84,14 @@ async function sendWelcomeEmail(name, email, password, role) {
     return sendEmail({
         to: email,
         subject: 'Welcome to E-GatePass System - Your Account Details',
-        html
+        html,
+        text: `Welcome ${name}! Your ${role} account has been created.\nEmail: ${email}\nPassword: ${password}\nPlease change your password after login.`
     });
+}
+
+// Wrapper to match previous auth.controller signature if needed, or just use sendWelcomeEmail logic
+async function sendCredentialsEmail(email, password, name, userType) {
+    return sendWelcomeEmail(name, email, password, userType);
 }
 
 async function sendPasswordResetEmail(email, otp, userType) {
@@ -104,12 +115,14 @@ async function sendPasswordResetEmail(email, otp, userType) {
     return sendEmail({
         to: email,
         subject: 'Password Reset OTP',
-        html
+        html,
+        text: `Your OTP for password reset is: ${otp}. It expires in 10 minutes.`
     });
 }
 
 module.exports = {
     sendEmail,
     sendWelcomeEmail,
+    sendCredentialsEmail,
     sendPasswordResetEmail
 };
