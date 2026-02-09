@@ -561,7 +561,7 @@ async function studentRegister(req, res) {
 
         for (const tg of tgs) {
             const count = await studentModel.countDocuments({ tgId: tg._id });
-            if (count < 3) {
+            if (count < 30) {
                 assignedTG = tg;
                 break;
             }
