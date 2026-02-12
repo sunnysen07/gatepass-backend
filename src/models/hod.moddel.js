@@ -14,6 +14,10 @@ const HODSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
+  profilePictureFileId: {
+    type: String,
+    default: ""
+  },
   email: {
     type: String,
     required: true,

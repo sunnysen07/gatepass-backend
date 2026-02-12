@@ -34,6 +34,10 @@ const studentSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  profilePictureFileId: {
+    type: String, // Store ImageKit File ID for deletion
+    default: "",
+  },
 
   // 👇 Add TG reference (to know which TG is assigned)
   tgId: {
