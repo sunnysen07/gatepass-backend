@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const HODmodel = require('../models/hod.moddel');
 const tgmodel = require('../models/tg.model');
 const tgModel = require('../models/tg.model');
+const Department = require('../models/department.model');
 const { sendCredentialsEmail, sendPasswordResetEmail } = require('../services/email.service');
 
 // Utility function to generate JWT token
@@ -191,20 +192,48 @@ async function facultyRegister(req, res) {
             });
         }
 
+        // ✅ Check if Department Exists for THIS Admin
+        const adminId = req.user.id;
+        const deptDoc = await Department.findOne({ name: department.trim().toUpperCase(), adminId });
+        if (!deptDoc) {
+            // Optional: Auto-create department if admin meant to? No, strict hierarchy says Admin creates Dept first.
+            return res.status(404).json({ message: `Department '${department}' not found. Please create it first.` });
+        }
+
+        // ✅ Check if Department already has an HOD
+        if (deptDoc.hodId) {
+            // Verify if this HOD actually exists (Handle Phantom Deletion)
+            const existingHOD = await HODmodel.findById(deptDoc.hodId);
+            if (existingHOD) {
+                return res.status(400).json({ message: `Department '${department}' already has an HOD assigned.` });
+            } else {
+                console.log(`⚠️ Department '${department}' referenced a non-existent HOD. Allowing new assignment.`);
+                // Proceed since the previous HOD is gone
+            }
+        }
+
         // Generate random password
         const tempPassword = generateRandomPassword();
         const hashPassword = await bcrypt.hash(tempPassword, 10);
 
-        // Create new faculty
+        // Create new faculty (HOD)
         const newFaculty = await HODmodel.create({
             name,
-            department: department.trim(),
+            department: department.trim().toUpperCase(),
+            departmentId: deptDoc._id, // Link to Dept Entity
             email,
-            password: hashPassword
+            password: hashPassword,
+            adminId: adminId // Link to Admin
         });
 
+        // ✅ Update Department with HOD ID
+        deptDoc.hodId = newFaculty._id;
+        await deptDoc.save();
+
         // Send credentials via email (or log to console)
-        await sendCredentialsEmail(email, tempPassword, name, 'Faculty');
+        // Send credentials via email (non-blocking)
+        sendCredentialsEmail(email, tempPassword, name, 'Faculty')
+            .catch(err => console.error("❌ Email sending failed (Faculty):", err));
 
         return res.status(201).json({
             message: "Faculty registered successfully. Check console for credentials.",
@@ -321,24 +350,39 @@ async function tgRegister(req, res) {
         const tempPassword = generateRandomPassword();
         const hashPassword = await bcrypt.hash(tempPassword, 10);
 
-        const hod = await HODmodel.findOne({ department });
+        // ✅ Check if Department Exists for THIS Admin
+        const adminId = req.user.id;
+        const deptDoc = await Department.findOne({ name: department.trim().toUpperCase(), adminId });
+        if (!deptDoc) {
+            return res.status(404).json({ message: `Department '${department}' not found.` });
+        }
+
+        // ✅ Check if HOD exists for this Department
+        if (!deptDoc.hodId) {
+            return res.status(400).json({ message: `Department '${department}' does not have an HOD yet. Cannot create TG.` });
+        }
+
+        // Verify HOD document validation (double check)
+        const hod = await HODmodel.findById(deptDoc.hodId);
         if (!hod) {
-            return res.status(404).json({
-                message: "No HOD found for this department"
-            });
+            return res.status(404).json({ message: "HOD record missing/corrupted." });
         }
 
         // Create new TG
         const newTG = await tgmodel.create({
             name,
-            department: department.trim(),
+            department: department.trim().toUpperCase(),
+            departmentId: deptDoc._id, // Link Dept
             email,
             password: hashPassword,
-            hodid: hod._id
+            hodid: hod._id, // Link HOD
+            adminId: adminId // Link to Admin
         });
 
         // Send credentials via email (or log to console)
-        await sendCredentialsEmail(email, tempPassword, name, 'TG');
+        // Send credentials via email (non-blocking)
+        sendCredentialsEmail(email, tempPassword, name, 'TG')
+            .catch(err => console.error("❌ Email sending failed (TG):", err));
 
         return res.status(201).json({
             message: "TG registered successfully. Check console for credentials.",
@@ -428,11 +472,11 @@ async function studentRegister(req, res) {
     console.log("✅ API hit:", req.body);
 
     try {
-        const { name, rollNumber, email, branch } = req.body;
+        const { name, rollNumber, email, branch, tgId } = req.body;
 
-        // ✅ Step 1: Validate input
-        if (!name || !rollNumber || !email || !branch) {
-            return res.status(400).json({ message: "All fields are required" });
+        // ✅ Step 1: Validate Basic Input
+        if (!name || !rollNumber || !email) {
+            return res.status(400).json({ message: "Name, Roll Number, and Email are required" });
         }
 
         // ✅ Step 2: Check if student already exists
@@ -443,51 +487,105 @@ async function studentRegister(req, res) {
             return res.status(400).json({ message: "Student already exists" });
         }
 
-        // ✅ Step 3: Find HOD for this branch
-        const capitalBranch = branch.toUpperCase()
-        const regex = new RegExp(`^${capitalBranch.trim()}\\s*$`, 'i');
-
-        const hod = await HODmodel.findOne({ department: { $regex: regex } });
-        if (!hod) {
-            return res.status(404).json({ message: "No HOD found for this branch" });
-        }
-
-        // ✅ Step 4: Find TGs in that branch
-        const tgs = await tgModel.find({ department: { $regex: regex } });
-
-        if (tgs.length === 0) {
-            return res.status(404).json({ message: "No TGs found for this branch" });
-        }
-        // console.log("✅ Found TGs:", tgs.length);
-
-
-        // ✅ Step 5: Assign TG (30 students per TG)
         let assignedTG = null;
+        let finalBranch = branch;
 
-        for (const tg of tgs) {
-            const count = await studentModel.countDocuments({ tgId: tg._id });
-            if (count < 30) {
-                assignedTG = tg;
-                break;
+        // ✅ Step 3: Handle TG Assignment & Branch Derivation
+        if (tgId) {
+            // Case A: TG is manually selected (Admin Mode)
+            assignedTG = await tgModel.findById(tgId).populate('departmentId');
+            if (!assignedTG) {
+                return res.status(404).json({ message: "Selected TG not found" });
             }
+            // 🔹 Force student branch to match TG's department
+            finalBranch = assignedTG.department;
+        } else {
+            // Case B: Auto-Assign based on Branch (Student Self-Register Mode)
+            if (!branch) {
+                return res.status(400).json({ message: "Branch is required for self-registration" });
+            }
+
+            const capitalBranch = branch.toUpperCase();
+            const regex = new RegExp(`^${capitalBranch.trim()}\\s*$`, 'i');
+
+            // Find TGs in this branch
+            const tgs = await tgModel.find({ department: { $regex: regex } }).populate('departmentId');
+
+            if (tgs.length === 0) {
+                return res.status(404).json({ message: "No TGs found for this branch" });
+            }
+
+            // Auto-Assign Logic (Fill TGs to 30)
+            for (const tg of tgs) {
+                const count = await studentModel.countDocuments({ tgId: tg._id });
+                if (count < 30) {
+                    assignedTG = tg;
+                    break;
+                }
+            }
+            // Overflow to last TG if all full
+            if (!assignedTG) assignedTG = tgs[tgs.length - 1];
+
+            finalBranch = capitalBranch;
         }
 
-        // ✅ If all TGs are full, assign last TG
-        if (!assignedTG) assignedTG = tgs[tgs.length - 1];
+        // ✅ Determine Department ID
+        // If assignedTG has departmentId populated, use it. 
+        // fallback: find department by name
+        // ✅ Determine Department Entity
+        let deptDoc = null;
+        if (assignedTG && assignedTG.departmentId) {
+            // Best case: We have the Dept ID from the TG
+            deptDoc = await Department.findById(assignedTG.departmentId);
+        }
+
+        if (!deptDoc) {
+            // Fallback: Find by name (Warning: Ambiguous if multiple admins have same dept name)
+            // Try to use assignedTG.adminId if available to scope it
+            const query = { name: finalBranch.trim().toUpperCase() };
+            if (assignedTG && assignedTG.adminId) {
+                query.adminId = assignedTG.adminId;
+            }
+            deptDoc = await Department.findOne(query);
+        }
+
+        if (!deptDoc) {
+            console.warn(`Warning: No Department Entity found for ${finalBranch}`);
+            // If strict, we could error here. But let's proceed to HOD check.
+        }
+
+        // ✅ Step 4: Find HOD via Department
+        // OLD BUGGY WAY: const hod = await HODmodel.findOne({ department: { $regex: hodRegex } });
+        // The HOD model does not have 'department' string field usually, only reference.
+        // We must use the relation: Department -> hodId
+
+        let hod = null;
+        if (deptDoc && deptDoc.hodId) {
+            hod = await HODmodel.findById(deptDoc.hodId);
+        }
+
+        // Strict Check
+        if (!hod) {
+            return res.status(400).json({
+                message: `Registration Failed: No HOD assigned for department '${finalBranch}'. Please contact Admin.`
+            });
+        }
 
         // ✅ Step 6: Generate temporary password & hash
         const tempPassword = "password123";
         const hashPassword = await bcrypt.hash(tempPassword, 10);
 
-        // ✅ Step 7: Create new student
+        // ✅ Step 7: Create Student
         const newStudent = await studentModel.create({
             name,
             rollNumber,
             email,
+            branch: finalBranch,
             password: hashPassword,
-            branch: capitalBranch,
-            tgId: assignedTG._id,
-            hodId: hod._id,
+            tgId: assignedTG ? assignedTG._id : null,
+            hodId: hod ? hod._id : null,
+            departmentId: deptDoc ? deptDoc._id : null, // 👈 Added
+            adminId: assignedTG ? assignedTG.adminId : null // 👈 Link to Admin via TG
         });
 
         // ✅ Step 8: Send credentials email (non-blocking)
@@ -504,7 +602,7 @@ async function studentRegister(req, res) {
                 email: newStudent.email,
                 rollNumber: newStudent.rollNumber,
                 tgId: assignedTG._id,
-                hodId: hod._id,
+                hodId: hod ? hod._id : null,
             },
         });
     } catch (error) {
@@ -706,8 +804,40 @@ async function forgotPassword(req, res) {
         let user = null;
         let UserModel = null;
 
-        // If userType is provided, search specific model
-        if (userType) {
+        // If userType is provided, search specific model or group
+        if (userType === 'normal') {
+            // Search Student, TG, HOD (Exclude Admin)
+            // 1. Student
+            user = await studentModel.findOne({ $or: [{ email: email }, { rollNumber: email }] });
+            if (user) {
+                UserModel = studentModel;
+                userType = 'student';
+            }
+            // 2. TG
+            if (!user) {
+                user = await tgmodel.findOne({ email });
+                if (user) {
+                    UserModel = tgmodel;
+                    userType = 'tg';
+                }
+            }
+            // 3. HOD
+            if (!user) {
+                user = await HODmodel.findOne({ email });
+                if (user) {
+                    UserModel = HODmodel;
+                    userType = 'faculty';
+                }
+            }
+        } else if (userType === 'admin') {
+            // Search Admin Only
+            user = await adminModel.findOne({ email });
+            if (user) {
+                UserModel = adminModel;
+                userType = 'admin';
+            }
+        } else if (userType) {
+            // specific type passed (fallback/legacy)
             switch (userType) {
                 case 'admin': UserModel = adminModel; break;
                 case 'faculty': UserModel = HODmodel; break;
@@ -721,11 +851,10 @@ async function forgotPassword(req, res) {
                 user = await UserModel.findOne({ email });
             }
         } else {
-            // Search all models
+            // Search all models (Fallback if no userType passed)
             // 1. Student
             user = await studentModel.findOne({ $or: [{ email: email }, { rollNumber: email }] });
             if (user) {
-                console.log(`✅ User found (Student): ${user.email}, Roll: ${user.rollNumber}, ID: ${user._id}`);
                 UserModel = studentModel;
                 userType = 'student';
             }
@@ -756,7 +885,7 @@ async function forgotPassword(req, res) {
         }
 
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(404).json({ message: "Email does not exist or invalid Email ID" });
         }
 
         // Generate 6-digit OTP

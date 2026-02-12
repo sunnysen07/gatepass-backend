@@ -73,7 +73,8 @@ const hodApproveGatepass = async (req, res) => {
     const io = req.app.get("io");
 
     // 🔔 REAL-TIME UPDATE TO STUDENT
-    io.to(updated.studentId._id.toString()).emit(
+    // 🔔 REAL-TIME UPDATE TO STUDENT
+    io.to(`student_${updated.studentId._id.toString()}`).emit(
       "gatepass:status",
       { gatepass: updated }
     );
@@ -107,7 +108,8 @@ const hodRejectGatepass = async (req, res) => {
     const io = req.app.get("io");
 
     // 🔔 REAL-TIME UPDATE TO STUDENT
-    io.to(updated.studentId._id.toString()).emit(
+    // 🔔 REAL-TIME UPDATE TO STUDENT
+    io.to(`student_${updated.studentId._id.toString()}`).emit(
       "gatepass:status",
       { gatepass: updated }
     );

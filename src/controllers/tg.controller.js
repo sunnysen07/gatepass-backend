@@ -20,6 +20,17 @@ const getTgbyid = async (req, res) => {
   }
 };
 
+// 🧩 Get All TGs (for dropdowns)
+const getAllTGs = async (req, res) => {
+  try {
+    const tgs = await tgmodel.find({}, "name department email");
+    res.status(200).json(tgs);
+  } catch (err) {
+    console.error("Error fetching TGs:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // 🧩 Get all gatepasses related to TG's students
 const getTGGatepasses = async (req, res) => {
   try {
@@ -165,11 +176,14 @@ const rejectGatepassByTG = async (req, res) => {
 
 
 
-module.exports = { 
-   getTGGatepasses, 
-   getTgbyid,
-   approveGatepassByTG ,
-    rejectGatepassByTG
+// getAllTGs is already defined above
+
+module.exports = {
+  getTGGatepasses,
+  getTgbyid,
+  approveGatepassByTG,
+  rejectGatepassByTG,
+  getAllTGs
 };
-  
+
 

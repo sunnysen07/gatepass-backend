@@ -5,10 +5,14 @@ const HODSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  department: {
+  departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    required: true // Enforcing link to Department entity
+  },
+  profilePicture: {
     type: String,
-    required: true,
-    unique: true
+    default: ""
   },
   email: {
     type: String,
@@ -24,6 +28,11 @@ const HODSchema = new mongoose.Schema({
   role: {
     type: String,
     default: 'HOD'
+  },
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    required: true
   }
 }, {
   timestamps: true

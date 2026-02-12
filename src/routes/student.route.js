@@ -8,6 +8,7 @@ const studentController = require('../controllers/student.controller');
 router.get('/students/:id', studentController.getStudentById);
 
 router.post('/:id/gatepass', studentController.createGatepassForStudent);
+router.post('/students/bulk', studentController.bulkRegisterStudents);
 router.get('/students', studentController.getAllStudents);
 
 

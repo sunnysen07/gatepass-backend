@@ -25,6 +25,15 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    required: true,
+  },
+  profilePicture: {
+    type: String,
+    default: "",
+  },
 
   // 👇 Add TG reference (to know which TG is assigned)
   tgId: {
@@ -39,6 +48,13 @@ const studentSchema = new mongoose.Schema({
     ref: "HOD",
     required: false,
   },
+
+  // 👇 Link to Admin (College/Org)
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    required: true
+  }
 },
   {
     timestamps: true,

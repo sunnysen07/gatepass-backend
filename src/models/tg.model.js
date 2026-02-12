@@ -9,6 +9,15 @@ const tgSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    departmentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Department',
+        required: true
+    },
+    profilePicture: {
+        type: String,
+        default: ""
+    },
     email: {
         type: String,
         required: true,
@@ -27,6 +36,11 @@ const tgSchema = new mongoose.Schema({
     hodid: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "HOD",
+        required: true
+    },
+    adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Admin",
         required: true
     }
 }, { timestamps: true }

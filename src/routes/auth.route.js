@@ -13,24 +13,23 @@ const {
     tgLogin,
     tgLogout,
     studentRegister,
-    changePassword,
-    forgotPassword,
-    resetPassword
+    changePassword
 } = require('../controllers/auth.controller');
 const authController = require('../controllers/auth.controller');
+const { verifyToken, verifyAdmin } = require('../middleware/auth.middleware');
 
 // Admin routes
 router.post('/admin/register', adminRegister);
 router.post('/admin/login', adminLogin);
 router.post('/admin/logout', adminLogout);
 
-// Faculty routes
-router.post('/faculty/register', facultyRegister);
+// Faculty routes (Protected: Only Admin can register Faculty)
+router.post('/faculty/register', verifyToken, verifyAdmin, facultyRegister);
 router.post('/faculty/login', facultyLogin);
 router.post('/faculty/logout', facultyLogout);
 
-// TG routes
-router.post('/tg/register', tgRegister);
+// TG routes (Protected: Only Admin can register TG)
+router.post('/tg/register', verifyToken, verifyAdmin, tgRegister);
 router.post('/tg/login', tgLogin);
 router.post('/tg/logout', tgLogout);
 
@@ -40,7 +39,7 @@ router.post('/student/login', studentLogin);
 router.post('/student/logout', studentLogout);
 
 // Password change
-router.post('/change-password', changePassword);
+router.post('/change-password', verifyToken, changePassword); // Protected
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/verify-otp', authController.verifyOTP);
 router.post('/reset-password', authController.resetPassword);

@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { getTGGatepasses, getTgbyid,approveGatepassByTG,rejectGatepassByTG } = require('../controllers/tg.controller');
+const { getTGGatepasses, getTgbyid, approveGatepassByTG, rejectGatepassByTG, getAllTGs } = require('../controllers/tg.controller');
 
-router.get('/gatepasses',  getTGGatepasses);
+router.get('/all-tgs', getAllTGs);
+router.get('/gatepasses', getTGGatepasses);
 
 // api/tg/{user._id}/gatepasses
 router.get('/tg/:id', getTgbyid);
