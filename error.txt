@@ -1,0 +1,12 @@
+
+Name: MongoServerError
+Message: E11000 duplicate key error collection: reactApp.hods index: department_1 dup key: { department: null }
+Code: 11000
+KeyPattern: {"department":1}
+Stack: MongoServerError: E11000 duplicate key error collection: reactApp.hods index: department_1 dup key: { department: null }
+    at InsertOneOperation.execute (D:\Wondershare\reactApp4\reactApp2\backend\node_modules\mongodb\lib\operations\insert.js:51:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async tryOperation (D:\Wondershare\reactApp4\reactApp2\backend\node_modules\mongodb\lib\operations\execute_operation.js:207:20)
+    at async executeOperation (D:\Wondershare\reactApp4\reactApp2\backend\node_modules\mongodb\lib\operations\execute_operation.js:75:16)
+    at async Collection.insertOne (D:\Wondershare\reactApp4\reactApp2\backend\node_modules\mongodb\lib\collection.js:157:16)
+        
