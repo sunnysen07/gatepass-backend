@@ -44,4 +44,7 @@ router.post('/forgot-password', authController.forgotPassword);
 router.post('/verify-otp', authController.verifyOTP);
 router.post('/reset-password', authController.resetPassword);
 
+// Push Token
+router.put('/push-token', authController.updatePushToken);
+
 module.exports = router;

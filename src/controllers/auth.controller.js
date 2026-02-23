@@ -762,6 +762,53 @@ async function changePassword(req, res) {
     }
 }
 
+// ==================== PUSH NOTIFICATIONS ====================
+
+// Update Push Token for any user type
+async function updatePushToken(req, res) {
+    try {
+        const { userId, userType, pushToken } = req.body;
+
+        if (!userId || !userType || !pushToken) {
+            return res.status(400).json({ message: "userId, userType, and pushToken are required" });
+        }
+
+        let UserModel;
+        switch (userType.toLowerCase()) {
+            case 'student':
+                UserModel = studentModel;
+                break;
+            case 'tg':
+                UserModel = tgmodel;
+                break;
+            case 'hod':
+            case 'faculty':
+                UserModel = HODmodel;
+                break;
+            case 'admin':
+                UserModel = adminModel;
+                break;
+            default:
+                return res.status(400).json({ message: "Invalid userType" });
+        }
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { pushToken },
+            { new: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({ message: "Push token updated successfully" });
+    } catch (error) {
+        console.error('Update push token error:', error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+}
+
 module.exports = {
     // Admin
     adminRegister,
@@ -787,7 +834,8 @@ module.exports = {
     changePassword,
     forgotPassword,
     verifyOTP,
-    resetPassword
+    resetPassword,
+    updatePushToken
 };
 
 // Forgot Password

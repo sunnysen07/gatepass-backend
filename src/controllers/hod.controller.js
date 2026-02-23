@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Gatepass = require("../models/gatepass.model");
 const Student = require("../models/student.model");
 const HODmodel = require("../models/hod.moddel");
+const { sendPushNotification } = require('../utils/pushNotification');
 
 /* 🧩 Get HOD by ID */
 const getHODbyId = async (req, res) => {
@@ -79,6 +80,15 @@ const hodApproveGatepass = async (req, res) => {
       { gatepass: updated }
     );
 
+    // 🔔 Expo Push Notification
+    if (updated.studentId && updated.studentId.pushToken) {
+      sendPushNotification(
+        updated.studentId.pushToken,
+        "Gatepass Approved by HOD!",
+        `Your gatepass is fully approved. Have a safe trip!`
+      );
+    }
+
     return res.json({
       success: true,
       message: "Gatepass approved by HOD",
@@ -114,6 +124,15 @@ const hodRejectGatepass = async (req, res) => {
       { gatepass: updated }
     );
 
+    // 🔔 Expo Push Notification
+    if (updated.studentId && updated.studentId.pushToken) {
+      sendPushNotification(
+        updated.studentId.pushToken,
+        "Gatepass Rejected by HOD",
+        "Your gatepass has been rejected by the HOD."
+      );
+    }
+
     return res.json({
       success: true,
       message: "Gatepass rejected by HOD",
@@ -125,9 +144,61 @@ const hodRejectGatepass = async (req, res) => {
   }
 };
 
+/* 🧩 Get Students assigned to an HOD */
+const getHODStudents = async (req, res) => {
+  try {
+    const hodId = req.params.id;
+    const objectId = new mongoose.Types.ObjectId(hodId);
+
+    const students = await Student.find({ hodId: objectId })
+      .select("-password -resetPasswordOTP -resetPasswordExpire") // Exclude sensitive info
+      .sort({ name: 1 });
+
+    res.status(200).json({
+      success: true,
+      total: students.length,
+      students,
+    });
+  } catch (error) {
+    console.error("Error fetching HOD students:", error);
+    res.status(500).json({ success: false, message: "Error fetching HOD students", error: error.message });
+  }
+};
+
+/* 🧩 Get TGs assigned to the HOD */
+const getHODTGs = async (req, res) => {
+  try {
+    const hodId = req.params.id;
+    const hod = await HODmodel.findById(hodId);
+
+    if (!hod) {
+      return res.status(404).json({ success: false, message: "HOD not found" });
+    }
+
+    const TG = require("../models/tg.model");
+
+    // Find TGs directly assigned to this HOD using 'hodid'
+    const tgs = await TG.find({ hodid: hodId })
+      .select("-password -resetPasswordOTP -resetPasswordExpire")
+      .sort({ name: 1 });
+
+    res.status(200).json({
+      success: true,
+      total: tgs.length,
+      tgs,
+    });
+
+  } catch (error) {
+    console.error("Error fetching HOD TGs:", error);
+    res.status(500).json({ success: false, message: "Error fetching HOD TGs", error: error.message });
+  }
+};
+
 module.exports = {
   getHODbyId,
   getHODGatepasses,
   hodApproveGatepass,
   hodRejectGatepass,
+  getHODStudents,
+  getHODTGs,
 };

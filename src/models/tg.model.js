@@ -46,6 +46,10 @@ const tgSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "Admin",
         required: true
+    },
+    pushToken: { // 🔥 Added for Expo Push Notifications
+        type: String,
+        default: ""
     }
 }, { timestamps: true }
 );

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Gatepass = require("../models/gatepass.model");
 const Student = require("../models/student.model");
 const tgmodel = require("../models/tg.model");
+const { sendPushNotification } = require('../utils/pushNotification');
 
 // 🧩 Get TG by ID
 const getTgbyid = async (req, res) => {
@@ -109,6 +110,22 @@ const approveGatepassByTG = async (req, res) => {
     // 📡 Notify Student
     io.to(studentRoom).emit("gatepass:status", { gatepass: updated });
 
+    // 🔔 Expo Push Notification
+    if (updated.studentId && updated.studentId.pushToken) {
+      sendPushNotification(
+        updated.studentId.pushToken,
+        "Gatepass Approved by TG",
+        "Your gatepass has been approved by your TG and forwarded to HOD."
+      );
+    }
+    if (updated.hodId && updated.hodId.pushToken) {
+      sendPushNotification(
+        updated.hodId.pushToken,
+        "New Gatepass for HOD Approval",
+        `A gatepass approved by TG requires your final approval.`
+      );
+    }
+
     return res.json({
       success: true,
       gatepass: updated
@@ -161,6 +178,15 @@ const rejectGatepassByTG = async (req, res) => {
       message: "Gatepass rejected by TG",
       gatepass: updated
     });
+
+    // 🔔 Expo Push Notification
+    if (updated.studentId && updated.studentId.pushToken) {
+      sendPushNotification(
+        updated.studentId.pushToken,
+        "Gatepass Rejected by TG",
+        "Your gatepass has been rejected by your TG."
+      );
+    }
 
     return res.json({
       success: true,

@@ -2,12 +2,15 @@
 const Student = require('../models/student.model');
 const Gatepass = require('../models/gatepass.model');
 const HODmodel = require('../models/hod.moddel');
+const { sendPushNotification } = require('../utils/pushNotification');
 
 // 🧩 Get a student by ID
 const getStudentById = async (req, res) => {
   try {
     const _id = req.params.id;
-    const student = await Student.findById(_id);
+    const student = await Student.findById(_id)
+      .populate('tgId', 'name email profilePicture')
+      .populate('hodId', 'name email profilePicture');
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
@@ -80,6 +83,16 @@ const createGatepassForStudent = async (req, res) => {
       console.log(`📡 Emitted "gatepass:new" to room → ${tgRoom}`);
     } else {
       console.log("⚠️ Socket.io instance not found in app");
+    }
+
+    // 🔔 Send Expo Push Notification to TG
+    if (student.tgId && student.tgId.pushToken) {
+      sendPushNotification(
+        student.tgId.pushToken,
+        "New Gatepass Request",
+        `New gatepass request from ${student.name} (${student.rollNumber}) needs your approval.`,
+        { gatepassId: gatepass._id }
+      );
     }
 
     // ✅ Return response
