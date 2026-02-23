@@ -178,12 +178,34 @@ const rejectGatepassByTG = async (req, res) => {
 
 // getAllTGs is already defined above
 
+// 🧩 Get Students assigned to a TG
+const getTGStudents = async (req, res) => {
+  try {
+    const tgId = req.params.id;
+    const objectId = new mongoose.Types.ObjectId(tgId);
+
+    const students = await Student.find({ tgId: objectId })
+      .select("-password -resetPasswordOTP -resetPasswordExpire") // Exclude sensitive info
+      .sort({ name: 1 });
+
+    res.status(200).json({
+      success: true,
+      total: students.length,
+      students,
+    });
+  } catch (error) {
+    console.error("Error fetching TG students:", error);
+    res.status(500).json({ success: false, message: "Error fetching TG students", error: error.message });
+  }
+};
+
 module.exports = {
   getTGGatepasses,
   getTgbyid,
   approveGatepassByTG,
   rejectGatepassByTG,
-  getAllTGs
+  getAllTGs,
+  getTGStudents
 };
 
 
