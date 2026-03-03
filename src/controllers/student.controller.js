@@ -49,6 +49,21 @@ const createGatepassForStudent = async (req, res) => {
       return res.status(400).json({ message: "No HOD assigned to this student" });
     }
 
+    // ✅ Check if student already created a gatepass today
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const existingGatepass = await Gatepass.findOne({
+      studentId: student._id,
+      createdAt: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    if (existingGatepass) {
+      return res.status(400).json({ message: "Your today's limit has been exceeded." });
+    }
+
     // ✅ Create new gatepass in DB
     let gatepass = await Gatepass.create({
       destination,
